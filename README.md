@@ -1,4 +1,4 @@
-# Vocca Chatbot
+# Revmedical Chatbot
 
 ## Two Bot Options
 
@@ -6,10 +6,6 @@
 
    - Uses gpt-4o for conversation
    - Requires OpenAI API key
-
-2. **Gemini Bot**
-   - Uses Google's Gemini Multimodal Live model
-   - Requires Gemini API key
 
 ## Quick Start
 
@@ -49,19 +45,18 @@ The bot server must be running for any of the client implementations to work. St
 - Node.js 16+ (for JavaScript and React implementations)
 - Daily API key
 - OpenAI API key (for OpenAI bot)
-- Gemini API key (for Gemini bot)
 - ElevenLabs API key
 - Modern web browser with WebRTC support
 
 ## Project Structure
 
 ```
-simple-chatbot/
+rdvmedical/
 ├── server/              # Bot server implementation
 │   ├── bot-openai.py    # OpenAI bot implementation
-│   ├── bot-gemini.py    # Gemini bot implementation
 │   ├── runner.py        # Server runner utilities
 │   ├── server.py        # FastAPI server
+│   ├── gcalendar.py     # Google calendar api management
 │   └── requirements.txt
 └── client/              # Client implementations
     └── react/           # Pipecat React client

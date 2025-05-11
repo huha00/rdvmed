@@ -36,26 +36,6 @@ load_dotenv(override=True)
 logger.remove(0)
 logger.add(sys.stderr, level="DEBUG")
 
-sprites = []
-script_dir = os.path.dirname(__file__)
-
-# Load sequential animation frames
-for i in range(1, 26):
-    # Build the full path to the image file
-    full_path = os.path.join(script_dir, f"assets/robot0{i}.png")
-    # Get the filename without the extension to use as the dictionary key
-    # Open the image and convert it to bytes
-    with Image.open(full_path) as img:
-        sprites.append(OutputImageRawFrame(image=img.tobytes(), size=img.size, format=img.format))
-
-# Create a smooth animation by adding reversed frames
-flipped = sprites[::-1]
-sprites.extend(flipped)
-
-# Define static and animated states
-quiet_frame = sprites[0]  # Static frame for when bot is listening
-talking_frame = SpriteFrame(images=sprites)  # Animation sequence for when bot is talking
-
 
 class IntakeProcessor:
     def __init__(self, context: OpenAILLMContext):
@@ -203,7 +183,6 @@ async def main():
             ),
             observers=[RTVIObserver(rtvi)],
         )
-        await task.queue_frame(quiet_frame)
 
         @rtvi.event_handler("on_client_ready")
         async def on_client_ready(rtvi):

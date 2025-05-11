@@ -24,6 +24,7 @@ ENV/
 dmypy.json
 credentials.json
 token.json 
+image.png
 
 # JavaScript/Node.js
 node_modules/

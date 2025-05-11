@@ -1,20 +1,4 @@
 
-"""RTVI Bot Server Implementation.
-
-This FastAPI server manages RTVI bot instances and provides endpoints for both
-direct browser access and RTVI client connections. It handles:
-- Creating Daily rooms
-- Managing bot processes
-- Providing connection credentials
-- Monitoring bot status
-
-Requirements:
-- Daily API key (set in .env file)
-- Python 3.10+
-- FastAPI
-- Running bot implementation
-"""
-
 import argparse
 import os
 import subprocess
@@ -54,18 +38,6 @@ def cleanup():
         proc = entry[0]
         proc.terminate()
         proc.wait()
-
-
-def get_bot_file():
-    bot_implementation = os.getenv("BOT_IMPLEMENTATION", "openai").lower().strip()
-    # If blank or None, default to openai
-    if not bot_implementation:
-        bot_implementation = "openai"
-    if bot_implementation not in ["openai", "gemini"]:
-        raise ValueError(
-            f"Invalid BOT_IMPLEMENTATION: {bot_implementation}. Must be 'openai' or 'gemini'"
-        )
-    return f"bot-{bot_implementation}"
 
 
 @asynccontextmanager
@@ -156,7 +128,7 @@ async def start_agent(request: Request):
 
     # Spawn a new bot process
     try:
-        bot_file = get_bot_file()
+        bot_file = "bot-openai"
         proc = subprocess.Popen(
             [f"python3 -m {bot_file} -u {room_url} -t {token}"],
             shell=True,
@@ -188,7 +160,7 @@ async def rtvi_connect(request: Request) -> Dict[Any, Any]:
 
     # Start the bot process
     try:
-        bot_file = get_bot_file()
+        bot_file = "bot-openai"
         proc = subprocess.Popen(
             [f"python3 -m {bot_file} -u {room_url} -t {token}"],
             shell=True,

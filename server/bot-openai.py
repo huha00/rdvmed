@@ -1,17 +1,4 @@
 
-"""OpenAI Bot Implementation.
-
-This module implements a chatbot using OpenAI's GPT-4 model for natural language
-processing. It includes:
-- Real-time audio/video interaction through Daily
-- Animated robot avatar
-- Text-to-speech using ElevenLabs
-- Support for both English and Spanish
-
-The bot runs as part of a pipeline that processes audio/video frames and manages
-the conversation flow.
-"""
-
 import asyncio
 import os
 import sys
@@ -38,7 +25,12 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIProcessor
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.transports.services.daily import DailyParams, DailyTransport
+from pipecat.transports.services.daily import DailyParams, DailyTransport, DailyTranscriptionSettings
+from pipecat.services.llm_service import FunctionCallParams
+
+from gcalendar import get_calendar_events
+from gcalendar import add_calendar_event
+from gcalendar import is_valid_iso_datetime, now_utc2
 
 load_dotenv(override=True)
 logger.remove(0)
@@ -65,37 +57,73 @@ quiet_frame = sprites[0]  # Static frame for when bot is listening
 talking_frame = SpriteFrame(images=sprites)  # Animation sequence for when bot is talking
 
 
-class TalkingAnimation(FrameProcessor):
-    """Manages the bot's visual animation states.
+class IntakeProcessor:
+    def __init__(self, context: OpenAILLMContext):
+        print(f"Initializing context from IntakeProcessor")
+        
+        ev = get_calendar_events()
+        now = now_utc2()
+        content = "Vous êtes Emma, une agente d'une entreprise appelée ServiceMed. Votre travail consiste à planifier un rendez-vous médical de 30 minutes. Vous parlez avec Hugo. Vous devez vous adresser à l'utilisateur par son prénom et rester polie et professionnelle. Vous n'êtes pas une professionnelle de santé, donc vous ne devez donner aucun conseil médical. Gardez vos réponses courtes. Votre rôle est de planifier un rendez-vous. Ne faites pas de suppositions sur les valeurs à utiliser dans les fonctions. Demandez des précisions si la réponse de l'utilisateur est ambiguë. Nous sommes le " + now + ". Les créneaux qui ne sont pas disponibles sont : " + ev + "Commencez par vous présenter. Appelez la fonction create_event une fois que vous vous êtes mis d'accord avec l'utilisateur sur la date et l'heure du rendez-vous."
+        print("Context given to robot:", content)
 
-    Switches between static (listening) and animated (talking) states based on
-    the bot's current speaking status.
-    """
+        context.add_message(
+            {
+                "role": "system",
+                "content": content
+            }
+        )
+        
+        context.set_tools(
+            [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "create_event",
+                        "description": "Utilisez cette fonction pour enregistrer le rendez-vous médical du médecin dans le calendrier.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "date": {
+                                    "type": "string",
+                                    "description": "La date et l'heure du rendez-vous. L'utilisateur peut les fournir dans n'importe quel format, mais convertissez-les au format YYYY-MM-DDTHH:MM:SS pour appeler cette fonction."
+                                }
+                            },
+                        },
+                    },
+                }
+            ]
+        )
 
-    def __init__(self):
-        super().__init__()
-        self._is_talking = False
+    async def create_event(self, params: FunctionCallParams):
+        print("create_event called!!!!!")
+        print(params.arguments["date"])
+        start_date_iso_str = params.arguments["date"]
+        
+        if is_valid_iso_datetime(start_date_iso_str):
+            
+            print("iso date is valid, adding calendar event...")
+            add_calendar_event(start_date_iso_str)
+            print("calendar event added successfully!")
+            
+            await params.result_callback(
+                [
+                    {
+                        "role": "system",
+                        "content": "Informez l'utilisateur que le rendez-vous a été pris. Remerciez-le et dites-lui au revoir."
+                    }
+                ]
+            )
+        else:
+            # The user provided an incorrect birthday; ask them to try again
+            await params.result_callback(
+                [
+                    {
+                        "role": "system",
+                        "content": "Il y a un problème technique. Demandez à l'utilisateur de rappeler plus tard, remerciez-le et dites-lui au revoir."
+                    }
+                ]
+            )
 
-    async def process_frame(self, frame: Frame, direction: FrameDirection):
-        """Process incoming frames and update animation state.
-
-        Args:
-            frame: The incoming frame to process
-            direction: The direction of frame flow in the pipeline
-        """
-        await super().process_frame(frame, direction)
-
-        # Switch to talking animation when bot starts speaking
-        if isinstance(frame, BotStartedSpeakingFrame):
-            if not self._is_talking:
-                await self.push_frame(talking_frame)
-                self._is_talking = True
-        # Return to static frame when bot stops speaking
-        elif isinstance(frame, BotStoppedSpeakingFrame):
-            await self.push_frame(quiet_frame)
-            self._is_talking = False
-
-        await self.push_frame(frame, direction)
 
 async def main():
     """Main bot execution function.
@@ -118,19 +146,12 @@ async def main():
             DailyParams(
                 audio_in_enabled=True,
                 audio_out_enabled=True,
-                video_out_enabled=True,
-                video_out_width=1024,
-                video_out_height=576,
                 vad_analyzer=SileroVADAnalyzer(),
                 transcription_enabled=True,
-                #
-                # Spanish
-                #
-                # transcription_settings=DailyTranscriptionSettings(
-                #     language="es",
-                #     tier="nova",
-                #     model="2-general"
-                # )
+                transcription_settings=DailyTranscriptionSettings(
+                     language="fr",
+                     model="nova-2-general"
+                )
             ),
         )
 
@@ -139,15 +160,8 @@ async def main():
         # Initialize text-to-speech service
         tts = ElevenLabsTTSService(
             api_key=os.getenv("ELEVENLABS_API_KEY"),
-            #
-            # English
-            #
-            voice_id="pNInz6obpgDQGcFmaJgB",
-            #
-            # Spanish
-            #
-            # model="eleven_multilingual_v2",
-            # voice_id="gD1IexrzCvsXPHUuT0s3",
+            model="eleven_multilingual_v2",
+            voice_id="rbFGGoDXFHtVghjHuS3E",
         )
 
         # Initialize LLM service
@@ -155,27 +169,14 @@ async def main():
             api_key=os.getenv("OPENAI_API_KEY"),
         )
 
-        messages = [
-            {
-                "role": "system",
-                #
-                # English
-                #
-                "content": "You are Chatbot, a friendly, helpful robot. Your goal is to demonstrate your capabilities in a succinct way. Your output will be converted to audio so don't include special characters in your answers. Respond to what the user said in a creative and helpful way, but keep your responses brief. Start by introducing yourself.",
-                #
-                # Spanish
-                #
-                # "content": "Eres Chatbot, un amigable y útil robot. Tu objetivo es demostrar tus capacidades de una manera breve. Tus respuestas se convertiran a audio así que nunca no debes incluir caracteres especiales. Contesta a lo que el usuario pregunte de una manera creativa, útil y breve. Empieza por presentarte a ti mismo.",
-            },
-        ]
-
         # Set up conversation context and management
         # The context_aggregator will automatically collect conversation context
-        context = OpenAILLMContext(messages)
+        messages = []
+        context = OpenAILLMContext(messages=messages)
         context_aggregator = llm.create_context_aggregator(context)
 
-        ta = TalkingAnimation()
-
+        intake = IntakeProcessor(context)
+        llm.register_function("create_event", intake.create_event)
         #
         # RTVI events for Pipecat client UI
         #
@@ -188,7 +189,6 @@ async def main():
                 context_aggregator.user(),
                 llm,
                 tts,
-                ta,
                 transport.output(),
                 context_aggregator.assistant(),
             ]
